@@ -19,6 +19,7 @@
 
 """
 
+
 import re
 import time
 from datetime import datetime
@@ -35,7 +36,8 @@ from urllib3.util.retry import Retry
 
 
 #______________________________________________________________________________________________________________
-DEFAULT_USER_AGENT = str(f"Wayback_Machine_Save_API - modified_hn_bot version of original -> https://github.com/akamhy/waybackpy")
+DEFAULT_USER_AGENT = "Wayback_Machine_Save_API - modified_hn_bot version of original -> https://github.com/akamhy/waybackpy"
+
 #______________________________________________________________________________________________________________
 
 
@@ -53,8 +55,8 @@ class Wayback_Machine_Save_API:
         max_tries: int = 8,
         global_error_log = [],
     ) -> None:
-        self.url = str(url).strip().replace(" ", "%20")
-        self.request_url = "https://web.archive.org/save/" + self.url
+        self.url = url.strip().replace(" ", "%20")
+        self.request_url = f"https://web.archive.org/save/{self.url}"
         self.user_agent = user_agent
         self.request_headers: Dict[str, str] = {"User-Agent": self.user_agent } # TODO 'Connection':'close'}
         if max_tries < 1:
@@ -71,12 +73,12 @@ class Wayback_Machine_Save_API:
         self.response_url: Optional[str] = None
         self.cached_save: Optional[bool] = None
         self.saved_archive: Optional[str] = None
-        
-        
+
+
         self.wayback_save_failed = None
         self.exceeded_wayback_api_limit = None
         self.fail_error_explaination = None
-        
+
         self.error_log = global_error_log
         self.number_of_tries = None
         self.time_range = [0,0]  # [start_time, end_time]
@@ -89,10 +91,7 @@ class Wayback_Machine_Save_API:
         else invoke the save method to save the archive which returns the
         archive thus we return the methods return value.
         """
-        if self._archive_url:
-            return self._archive_url
-
-        return self.save()
+        return self._archive_url or self.save()
 
     """
         Creates a session and tries 'retries' number of times to
@@ -110,7 +109,7 @@ class Wayback_Machine_Save_API:
         the response URL yourself in the browser.
     """
     def get_save_request_headers(self) -> None:
-        
+
         session = requests.Session()
         retries = Retry(
             total=self.total_save_retries,
@@ -124,7 +123,7 @@ class Wayback_Machine_Save_API:
         self.status_code = self.response.status_code
         self.response_url = self.response.url
         session.close()
-        
+
         # TODO --> ADD the number of tries to timer, and back off for a few minutes to not trigger, a ip block
 
         if self.status_code == 429:
@@ -132,7 +131,7 @@ class Wayback_Machine_Save_API:
             # see https://github.com/akamhy/waybackpy/issues/97
             self.wayback_save_failed = True
             self.exceeded_wayback_api_limit = True
-            
+
             self.fail_error_explaination = str(
                 f"Can not save '{self.url}'. "
                 f"Save request refused by the server. "
@@ -164,27 +163,24 @@ class Wayback_Machine_Save_API:
         regex1 = r"Content-Location: (/web/[0-9]{14}/.*)"
         match = re.search(regex1, str(self.headers))
         if match:
-            return "https://web.archive.org" + match.group(1)
+            return "https://web.archive.org" + match[1]
 
         regex2 = r"rel=\"memento.*?(web\.archive\.org/web/[0-9]{14}/.*?)>"
         match = re.search(regex2, str(self.headers))
         if match is not None and len(match.groups()) == 1:
-            return "https://" + match.group(1)
+            return "https://" + match[1]
 
         regex3 = r"X-Cache-Key:\shttps(.*)[A-Z]{2}"
         match = re.search(regex3, str(self.headers))
         if match is not None and len(match.groups()) == 1:
-            return "https" + match.group(1)
+            return "https" + match[1]
 
         self.response_url = (
             "" if self.response_url is None else self.response_url.strip()
         )
         regex4 = r"web\.archive\.org/web/(?:[0-9]*?)/(?:.*)$"
         match = re.search(regex4, self.response_url)
-        if match is not None:
-            return "https://" + match.group(0)
-
-        return None
+        return "https://" + match[0] if match is not None else None
 
     
     """
@@ -198,9 +194,7 @@ class Wayback_Machine_Save_API:
     @staticmethod
     def sleep(tries: int) -> None:
         
-        sleep_seconds = 5
-        if tries % 3 == 0:
-            sleep_seconds = 10
+        sleep_seconds = 10 if tries % 3 == 0 else 5
         time.sleep(sleep_seconds)
 
     
@@ -228,16 +222,12 @@ class Wayback_Machine_Save_API:
             self.error_log.append( f" {str(time.asctime())} --- Error :: timestamp() Can not parse timestamp from archive URL, '{self._archive_url}" )
             return None         
 
-        string_timestamp = match.group(1)
+        string_timestamp = match[1]
         timestamp = datetime.strptime(string_timestamp, "%Y%m%d%H%M%S")
         timestamp_unixtime = time.mktime(timestamp.timetuple())
         instance_birth_time_unixtime = time.mktime(self.instance_birth_time.timetuple())
 
-        if timestamp_unixtime < instance_birth_time_unixtime:
-            self.cached_save = True
-        else:
-            self.cached_save = False
-
+        self.cached_save = timestamp_unixtime < instance_birth_time_unixtime
         return timestamp
 
 
@@ -249,7 +239,7 @@ class Wayback_Machine_Save_API:
         we were unable to retrieve the archive from the Wayback Machine.
     """
     def save(self) -> str:
-        
+
         self.time_range[0] = time.time()
         self.saved_archive = None
         tries = 0
@@ -265,24 +255,24 @@ class Wayback_Machine_Save_API:
                 self.wayback_save_failed = False
                 self.exceeded_wayback_api_limit = False
                 self._archive_url = self.saved_archive
-                
-                
+
+
                 result = self.timestamp() # changed the timestamp to return None if some error occured, so we dont raise an exception TODO --> fix this entire mess
                 if result != None :    
-                
+
                     # Added --> 
                     self.number_of_tries = tries
                     self.time_range[1] = time.time()
                     # <-- Added 
-                    
-                    
+
+
                     return self.saved_archive
 
             tries += 1
             if tries >= self.max_tries:
                 self.wayback_save_failed = True
                 self.exceeded_wayback_api_limit = True
-                
+
                 self.fail_error_explaination = str(
                     f"Tried {tries} times but failed to save "
                     f"and retrieve the archive for {self.url}.\n"
@@ -290,7 +280,7 @@ class Wayback_Machine_Save_API:
                     f"Response Header:\n{self.headers}"
                 )
                 self.error_log.append(f" {str(time.asctime())} --- Error ::   save() Failed {self.fail_error_explaination}" )
-            
+
                 # Added --> 
                 self.number_of_tries = tries
                 self.time_range[1] = time.time()

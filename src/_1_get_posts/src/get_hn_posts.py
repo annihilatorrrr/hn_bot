@@ -26,26 +26,26 @@ from utils.general.generate_core_urls import get_core_url_list
 class Process_HN_Posts:
     
     def __init__(self, error_logger ) -> None:
-        
+
         #self.hn_posts_list = None
-        
+
         self.hn_top_posts_list = None
         self.hn_new_posts_list = None
         self.hn_best_posts_list = None
-        
+
         self.completed_post_set = set()    # set of the posts which have aready been processed
 
         self.posts_to_process_list = []     # list of ( <post_num>, <url>) tuples for all the posts with urls to websites that require subscription 
-        
+
         self.error_log = error_logger  # list of errors that occurend durint the process
-        
+
         # variables used when testing each post (determine if this is needed)
         self.curr_post_id = None
         self.curr_post_details = None
         self.curr_post_url = None
 
         self.request_response_description_map: dict[int, str] = request_response_description_map
-        
+
         self.subscription_site_set = subscription_site_set
         
         
@@ -157,22 +157,21 @@ class Process_HN_Posts:
     # https://github.com/lipoja/URLExtract
     def get_post_url(self):
 
-      if "url" in self.curr_post_details:
-          post_url = self.curr_post_details['url']
-          return [post_url]
+        if "url" in self.curr_post_details:
+            post_url = self.curr_post_details['url']
+            return [post_url]
 
-      elif "text" in self.curr_post_details:
+        elif "text" in self.curr_post_details:
 
-        # TODO -- what to do if there are multiple urls
-        post_text = self.curr_post_details["text"]
+            # TODO -- what to do if there are multiple urls
+            post_text = self.curr_post_details["text"]
 
-        http_list = reg.findall(r'(https?://[^\s]+)', post_text)
-        www_list = reg.findall(r'(?:www[^\s]+)', post_text)
-        
-        post_url_list = http_list + [ 'http://'+www  for www in www_list]
-        return post_url_list
-      else :
-        return []
+            http_list = reg.findall(r'(https?://[^\s]+)', post_text)
+            www_list = reg.findall(r'(?:www[^\s]+)', post_text)
+
+            return http_list + [f'http://{www}' for www in www_list]
+        else:
+            return []
   #------------------------------------------------------------------------------------ 
 
 
@@ -233,50 +232,46 @@ class Process_HN_Posts:
     
     def process_all_posts(self):
       
-      # Testing all the posts  
-      # TODO determine a filtering metric based on predicted impact score of post  --> also useful for using when deciding which 15 urls to use archive.today to save /search for 
-      
-      # pre-step 0 : join the sets without duplicates
-      set_of_all_hn_posts = self.add_sets([ self.hn_top_posts_list, self.hn_new_posts_list, self.hn_best_posts_list])
-      if len(set_of_all_hn_posts) > 0 :
-        self.hn_top_posts_list = list(set_of_all_hn_posts)
-      
-      
-      # step 0 -- inital error checking and correcting
-      if self.hn_top_posts_list == None :
-        error = (f"Error : initial API request to HackerNews failed with response - {self.hn_top_posts_list[0]} ")
-        self.error_log.error(error)
-      
-      else:
-        
-        # a - for each post-id in the list of the top hn posts from start->stop
-        for self.curr_post_id in self.hn_top_posts_list: # TODO TODO TODO --> take off the 0:150 this is just to speed up testing
-  
-          # b - make sure that the post-id was not already processed previously
-          if self.curr_post_id not in self.completed_post_set:
-            
-            # c - next call the hn api to get the post details
-            self.get_post_details()
-            
-            # c-1 : if the post returns an error : skip error already added to error log
-            if self.curr_post_details == None :
-              continue
-            
-            # c-2 : if the the post returns a ok resonsem evaluate the details
-            else:
-              
-              # d : first determine if the current post url is in the set of webstes the require a subscription
-              has_sub_block, url = self.post_has_sub_block()
-              
-              # TODO ---> add a check to see if there is a archive url posted in the comments 
-              # NOTE the word archive can be part of the url title so look for archive.ph or the http://web.archive.org/web/ strings in the substrings
+        # Testing all the posts  
+        # TODO determine a filtering metric based on predicted impact score of post  --> also useful for using when deciding which 15 urls to use archive.today to save /search for 
 
-              # d-1 : if yes, then add a tuple if  (id,  post_details, url)  to the list of urls -> to process (find internet-archive snapshots)
-              if has_sub_block:
-                self.posts_to_process_list.append( (self.curr_post_id, url ) )
+        # pre-step 0 : join the sets without duplicates
+        set_of_all_hn_posts = self.add_sets([ self.hn_top_posts_list, self.hn_new_posts_list, self.hn_best_posts_list])
+        if len(set_of_all_hn_posts) > 0 :
+          self.hn_top_posts_list = list(set_of_all_hn_posts)
+
+
+          # step 0 -- inital error checking and correcting
+        if self.hn_top_posts_list is None:
+            error = (f"Error : initial API request to HackerNews failed with response - {self.hn_top_posts_list[0]} ")
+            self.error_log.error(error)
+
+        else:
+
+                # a - for each post-id in the list of the top hn posts from start->stop
+            for self.curr_post_id in self.hn_top_posts_list: # TODO TODO TODO --> take off the 0:150 this is just to speed up testing
               
-              # d-2 : otherwise add it to the completed post set and move on, (if the url is not present maybe add some other process)
-              else :      
-                self.completed_post_set.add(self.curr_post_id)
+                      # b - make sure that the post-id was not already processed previously
+                if self.curr_post_id not in self.completed_post_set:
+                        
+                    # c - next call the hn api to get the post details
+                    self.get_post_details()
+
+                    if self.curr_post_details is None:
+                        continue
+
+                    # d : first determine if the current post url is in the set of webstes the require a subscription
+                    has_sub_block, url = self.post_has_sub_block()
+
+                    # TODO ---> add a check to see if there is a archive url posted in the comments 
+                    # NOTE the word archive can be part of the url title so look for archive.ph or the http://web.archive.org/web/ strings in the substrings
+
+                    # d-1 : if yes, then add a tuple if  (id,  post_details, url)  to the list of urls -> to process (find internet-archive snapshots)
+                    if has_sub_block:
+                      self.posts_to_process_list.append( (self.curr_post_id, url ) )
+
+                    # d-2 : otherwise add it to the completed post set and move on, (if the url is not present maybe add some other process)
+                    else :      
+                      self.completed_post_set.add(self.curr_post_id)
                 
         

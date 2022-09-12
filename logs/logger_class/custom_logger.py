@@ -5,14 +5,14 @@ from os.path import join,dirname
 class Logger:
     
     def __init__(self, logger_name, level=logging.INFO):
-        
+
         self.format = logging.Formatter('%(asctime)s - %(message)s', "%H:%M:%S") 
         # logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', "%H:%M:%S") 
         self.name = logger_name
         self.level = level
 
         self.curr_output_file = None
-        
+
         self.logger = self.setup_new_logger()
         self.file_save_date = date.today()
     
@@ -23,19 +23,15 @@ class Logger:
     def setup_new_logger(self, name = None, specify_name = False) -> None:
         
         # Step 1 : get the proper filename
-        if specify_name :
-            self.curr_output_file = name
-        else :
-            self.curr_output_file = self.generate_file_name()
-    
+        self.curr_output_file = name if specify_name else self.generate_file_name()
         # Step 2 : Setup a logger - handler
-        log_handler = logging.FileHandler(self.curr_output_file)        
+        log_handler = logging.FileHandler(self.curr_output_file)
         log_handler.setFormatter(self.format)
 
         logger = logging.getLogger(self.name)
         logger.setLevel(self.level)
         logger.addHandler(log_handler)
-        
+
         return logger
     
 
@@ -60,13 +56,14 @@ class Logger:
     '''
         Generates a new file name with the format _<current_day>_<error/run_logger>.text
     '''
-    def generate_file_name(self)  -> str :
+    def generate_file_name(self) -> str:
         todays_date =  (date.today()).strftime("_%m_%d_%y_")
-        
-        proper_log_folder = "../files/_1_run_log_files/" if "run" in self.name  else  "../files/_2_error_log_files/" 
-        relative_file_path = join(dirname(__file__), proper_log_folder + str(todays_date + self.name + ".txt" ))
-        
-        return relative_file_path
+
+        proper_log_folder = "../files/_1_run_log_files/" if "run" in self.name  else  "../files/_2_error_log_files/"
+        return join(
+            dirname(__file__),
+            proper_log_folder + str(todays_date + self.name + ".txt"),
+        )
         
     
         

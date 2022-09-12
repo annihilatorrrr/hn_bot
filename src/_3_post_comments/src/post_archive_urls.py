@@ -20,23 +20,23 @@ class Post_Archive_Urls :
             Part 1 : initalize the class  variables 
     -----------------------------------------------------------------------------''' 
     def __init__(self, name : str, post_archive_map: dict, completed_post_set: set, api_timer: object, run_log :object, error_log :object) -> None:
-    
+
         self.name  = name
-        
+
         self.post_archive_map = post_archive_map    # dict {} of --  post_num : archive_url  --  key-values
-        
+
         self.completed_post_set = completed_post_set
-        
+
         self.hn_api_timer = api_timer
-        
+
         self.wait_limit = 2 * 60 # max time to wait is 2 minutes
-        
+
         self.hn_id_timer_map = None     # this lets us know the ids and maps them to a time they were last used, and a bool value for if the account is new 
-        
+
         self.error_log = error_log
         self.run_log = run_log
-        
-        
+
+
         self.account_name = None      #  TODO --> upload your own and make github secret 
         self.password     = None      #  TODO --> upload your own and make github secret  
     
@@ -52,46 +52,34 @@ class Post_Archive_Urls :
     def post_comments(self):
         
         # a - itterate through all the posts
-        for post_num, archive_url in self.post_archive_map.items() :
+        for post_num, archive_url in self.post_archive_map.items():
             
-            # step 1 : get the hmac value
-            
-            # check_timer_and_429 
-            no_timer_errors = self.check_timer_and_429()
-            if no_timer_errors : 
-            
+            if no_timer_errors := self.check_timer_and_429():
                 self.hn_api_timer.add_to_queue() # update the api timer to include this run
                 found_hmac, hmac_value = self.get_hmac(post_num, archive_url)
-                
-                
-                if found_hmac :
+
+
+                if found_hmac:
                       
-                  # check_timer_and_429 
-                  no_timer_errors = self.check_timer_and_429()
-                  if  no_timer_errors :
-                      
-                      # step 3 : try to post 
-                      self.hn_api_timer.add_to_queue() # update the api timer to include this run
-                      posted, response = self.post_comment(post_num, archive_url, hmac_value, id)  #  return bool value for if we were able to post the comment and the response to be evaluated
-                      
-                      # step 4 : evaluate the response --> already done in post_comment 
-                      # --> possibly circle back, see if you need to back off and try another id, or  something similar)
-                      # self.update_id_dictionary() # TODO try to incorporate this with the evaluate response i.e. self.evaluate_response_and_update_id_dict()
-                      
-                                                                              
-                      if posted :
-                          self.run_log.info( f"  --- Posted Comment :: For post number {post_num}, we added the comment and archived url {archive_url}")
-                      
-                      #else :  ->  No need to log error for :: post_comment:: if we failed this is logged at the point of failure --> only the success of post_comment needs to be logged 
-                      
-                  else :
-                      self.error_log.error( f"  ------ Error :: Test Function no_timer_errors() - Failed for post  {post_num}."   )
-                      
-                        
-                    
-                # else : --> No need to log error for :: get_hmac() ::  error logging happens in process_response for all cases except status_codes in [500, 503, 504] 
-            
-            else :
+                    if no_timer_errors := self.check_timer_and_429():
+                        # step 3 : try to post 
+                        self.hn_api_timer.add_to_queue() # update the api timer to include this run
+                        posted, response = self.post_comment(post_num, archive_url, hmac_value, id)  #  return bool value for if we were able to post the comment and the response to be evaluated
+
+                        # step 4 : evaluate the response --> already done in post_comment 
+                        # --> possibly circle back, see if you need to back off and try another id, or  something similar)
+                        # self.update_id_dictionary() # TODO try to incorporate this with the evaluate response i.e. self.evaluate_response_and_update_id_dict()
+
+
+                        if posted :
+                            self.run_log.info( f"  --- Posted Comment :: For post number {post_num}, we added the comment and archived url {archive_url}")
+
+                    else:
+                        self.error_log.error( f"  ------ Error :: Test Function no_timer_errors() - Failed for post  {post_num}."   )
+
+
+
+            else:
                 self.error_log.error( f"  ------ Error :: Test Function no_timer_errors() - Failed for post  {post_num}."   )
     
     
@@ -112,41 +100,37 @@ class Post_Archive_Urls :
             "id": str(post_num),
         }
         post_kwargs = dict(timeout=120, allow_redirects=True, headers=header, data=data)
-        
+
         response = requests.post(post_url, **post_kwargs)
-        
+
         requests_succeded = self.process_response(response, "get_hmac", post_num)
-        
+
         if requests_succeded is None: # case of response = one of [500, 503, 504] 
-            
+
             # a - sleep for a bit and give it one more try
             T.sleep(random.uniform(13,18))
             response = requests.post(post_url, **post_kwargs)
-            
+
             requests_succeded = self.process_response(response, "get_hmac", post_num)
-            
+
             # b - see if second try worked out 
             if requests_succeded is None:
                 self.error_log.error( f"  ------ Error :: get_hmac() - Failed for post  {post_num} returned with status code = { response.status_code }"   )
-                
+
             elif requests_succeded  :
                 extracted_hmac, hmac_value = self.extract_hmac(response.text)
-                
+
 
         elif requests_succeded :
             extracted_hmac, hmac_value = self.extract_hmac(response.text)
-        
+
         else :
             # error logging happens in process_response for all cases except status_codes in [500, 503, 504] 
             return False, None
-        
-        
+
+
         # if we reached here the requsts succeded, but we need to
-        if extracted_hmac :
-                return True, hmac_value
-        else :
-            # error logging happens in process_response for all cases except status_codes in [500, 503, 504] 
-            return False, None
+        return (True, hmac_value) if extracted_hmac else (False, None)
                     
             
                 
@@ -165,7 +149,7 @@ class Post_Archive_Urls :
         except Exception as e:
             self.error_log.error( f"  ------ Error :: Failed to - extract_hmace() - with error {e}"   )
             return False, None
-        
+
         if isinstance(hmac_value, str) and len(hmac_value) > 0 :
             return True, hmac_value
         else :
@@ -180,9 +164,9 @@ class Post_Archive_Urls :
             Function 2 : post_comment()
     '''
     def post_comment(self, post_id, archive_url, hmac_value, id = None):
-        
-        
-        
+
+
+
         # step 1 : setup the request
         user_agent = get_random_user_agent() 
         header = { "User-Agent": user_agent, 
@@ -200,7 +184,7 @@ class Post_Archive_Urls :
 
         comment_url = r"https://news.ycombinator.com/comment"
 
-    
+
         data = {
             "acct":   self.account_name,            
             "pw"  :   self.password, 
@@ -209,33 +193,33 @@ class Post_Archive_Urls :
             "hmac" : str(hmac_value),
             "text" : str(archive_url)  #TOD encode the string to htmlo
         }
-        
+
         post_kwargs = dict(timeout=120, allow_redirects=True, headers=header, data=data)
-        
+
         comment_to_post = f'''If your access to this article is blocked due to a subscription requirement \n\t -- checkout the article's archive : {archive_url}\n''' 
-        
+
         response = requests.post( str(comment_to_post),  **post_kwargs)
-        
+
         requests_succeded = self.process_response(response, "post_comment", post_id)
-        
+
         if requests_succeded is None: # case of response = one of [500, 503, 504] 
             # a - sleep for a bit and give it one more try
             T.sleep(random.uniform(13,18))
-            
+
             response = requests.post( str(comment_to_post),  **post_kwargs)
-            
+
             requests_succeded = self.process_response(response, "post_comment", post_id)
-            
+
             # b - see if second try worked out 
             if requests_succeded is None:
                 self.error_log.error( f"  ------ Error :: post_comment() - Failed for post  {post_id} returned with status code = { response.status_code }"   )
-                
+
             elif requests_succeded  :
                 return True, response
-                
+
         elif requests_succeded :
             return True, response
-        
+
         # if we reached we failed to post the comment 
         self.error_log.error( f"  ------ Error :: Failed to - post_comment() - For post {post_id}, it returned with status code = { response.status_code }"   )
         return False, response

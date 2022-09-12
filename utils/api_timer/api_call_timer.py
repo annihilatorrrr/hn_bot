@@ -24,12 +24,12 @@ class Api_Timer:
         self.time_window = api_time_window_ * 60  # minutes to seconds
 
         self.error_log = error_log
-        
+
         self.too_many_requests_ = False
         self.too_many_requests_timestamp = None
-        
+
         self.random_wait_range =  random_wait_range
-        
+
         self._429_wait_time = _429_wait_time * 60 # time is in minutes we want to convert to second
 
 
@@ -44,19 +44,13 @@ class Api_Timer:
         #print(101, int(T.time() - self.queue[0]) )
         while len(self.queue) > 0 and int(T.time() - self.queue[0]) > self.time_window :
             self.queue.pop(0)
-        
+
         # b - update the window_start_time, so that its accurate
-        if len(self.queue) > 0: 
-            self.window_start_time = self.queue[0] 
-        else :
-            # start it now - becase we have no other options (and most likely the update is triggered by a add_to_queue )
-            self.window_start_time = T.time()         
-        
-        
+        self.window_start_time = self.queue[0] if len(self.queue) > 0 else T.time()
         # c - if there was too many requests and 15 minutes have passed since the api-timed out then we can try to reset it 
         if self.too_many_requests() :
             time_since_call = T.time() - self.too_many_requests_timestamp
-            
+
             if time_since_call >= (15 * 60)  :# 15 minutes * 60 seconds per minute
                 self.update_too_many_requests("remove")
                 
@@ -131,21 +125,18 @@ class Api_Timer:
                get_wait_time() :
 
         -----------------------------------------------------------------------------''' 
-    def get_wait_time(self) -> float :
+    def get_wait_time(self) -> float:
         # step 1 : Update the queue
         self.update_queue()
 
         # step 2 : make sure (a) we actualy have a block (i.e. number api calls are == limit  )
-        if self.limit_reached() :
+        if self.limit_reached():
             window_start = self.queue[0]  # first value in the queue
-       
+
             time_to_wait = self.time_window - ( T.time() - window_start )
             #       time until first value is outside the window   = time_window in seconds - ( time_elaped since first api_call = currtime-api_call_time)
-            if time_to_wait > 0:
-                return time_to_wait
-            else :
-                return 0 
-        else : # if there is no block 
+            return max(time_to_wait, 0)
+        else: # if there is no block 
             return 0 
         
         
@@ -159,16 +150,14 @@ class Api_Timer:
                 
     -----------------------------------------------------------------------------'''    
     
-    def too_many_requests(self) :
-        if self.too_many_requests_ == True:
-            _30_min_break = 30 * 60
-            if T.time() - self.too_many_requests_timestamp > _30_min_break :
-                self.update_too_many_requests("remove")
-                return False 
-            else:
-                return True
-        else :
-            return False  
+    def too_many_requests(self):
+        if self.too_many_requests_ != True:
+            return False
+        _30_min_break = 30 * 60
+        if T.time() - self.too_many_requests_timestamp <= _30_min_break:
+            return True
+        self.update_too_many_requests("remove")
+        return False  
         
         
     def get_429_wait_time(self):
